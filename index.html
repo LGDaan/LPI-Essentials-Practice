@@ -154,8 +154,118 @@
           div.appendChild(document.createElement('br'));
         });
 
+        // Per-question answer tools: validate the current selection or reveal the answer
+        const tools = document.createElement('div');
+        tools.className = 'answer-tools';
+
+        const checkBtn = document.createElement('button');
+        checkBtn.type = 'button';
+        checkBtn.className = 'check-answer-btn';
+        checkBtn.textContent = 'Check answer';
+        checkBtn.onclick = e => { e.preventDefault(); checkAnswer(i); };
+
+        const showBtn = document.createElement('button');
+        showBtn.type = 'button';
+        showBtn.className = 'show-answer-btn';
+        showBtn.textContent = 'Show answer';
+        showBtn.onclick = e => { e.preventDefault(); revealAnswer(i); };
+
+        tools.appendChild(checkBtn);
+        tools.appendChild(showBtn);
+        div.appendChild(tools);
+
+        const feedback = document.createElement('div');
+        feedback.className = 'answer-feedback';
+        feedback.id = `feedback${i}`;
+        feedback.setAttribute('aria-live', 'polite');
+        div.appendChild(feedback);
+
+        // Clear per-question feedback when the selection changes
+        div.querySelectorAll(`input[name=q${i}]`).forEach(input => {
+          input.addEventListener('change', () => {
+            if (div.classList.contains('submitted')) return;
+            clearQuestionFeedback(i);
+          });
+        });
+
         form.appendChild(div);
       });
+    }
+
+    function getSelected(i) {
+      return Array.from(document.querySelectorAll(`input[name=q${i}]`))
+        .filter(input => input.checked)
+        .map(input => input.value);
+    }
+
+    function clearQuestionFeedback(i) {
+      const qDiv = document.getElementById(`q${i}`);
+      qDiv.querySelectorAll('label').forEach(label => {
+        label.classList.remove('correct', 'incorrect', 'selected-answer');
+      });
+      const fb = document.getElementById(`feedback${i}`);
+      fb.className = 'answer-feedback';
+      fb.innerHTML = '';
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function checkAnswer(i) {
+      const q = quizData[i];
+      const qDiv = document.getElementById(`q${i}`);
+      const fb = document.getElementById(`feedback${i}`);
+      const selected = getSelected(i);
+
+      clearQuestionFeedback(i);
+
+      if (selected.length === 0) {
+        fb.className = 'answer-feedback feedback-info';
+        fb.textContent = q.answer.length > 1
+          ? `Select ${q.answer.length} answers first, then check.`
+          : 'Select an answer first, then check.';
+        return;
+      }
+
+      const isCorrect = q.answer.length === selected.length && q.answer.every(ans => selected.includes(ans));
+
+      qDiv.querySelectorAll(`input[name=q${i}]`).forEach(input => {
+        if (!input.checked) return;
+        const label = input.parentElement;
+        label.classList.add('selected-answer', q.answer.includes(input.value) ? 'correct' : 'incorrect');
+      });
+
+      if (isCorrect) {
+        fb.className = 'answer-feedback feedback-correct';
+        fb.textContent = '✔ Correct!';
+      } else {
+        const right = selected.filter(s => q.answer.includes(s)).length;
+        fb.className = 'answer-feedback feedback-incorrect';
+        fb.textContent = q.answer.length > 1
+          ? `✘ Incorrect. ${right} of your ${selected.length} selected answer(s) are right; this question has ${q.answer.length} correct answers.`
+          : '✘ Incorrect. Try again or use "Show answer".';
+      }
+    }
+
+    function revealAnswer(i) {
+      const q = quizData[i];
+      const qDiv = document.getElementById(`q${i}`);
+      const fb = document.getElementById(`feedback${i}`);
+
+      qDiv.querySelectorAll(`input[name=q${i}]`).forEach(input => {
+        const label = input.parentElement;
+        label.classList.remove('correct', 'incorrect', 'selected-answer');
+        if (input.checked) {
+          label.classList.add('selected-answer', q.answer.includes(input.value) ? 'correct' : 'incorrect');
+        } else if (q.answer.includes(input.value)) {
+          label.classList.add('correct');
+        }
+      });
+
+      fb.className = 'answer-feedback feedback-reveal';
+      fb.innerHTML = `<strong>Correct answer${q.answer.length > 1 ? 's' : ''}:</strong><ul>` +
+        q.answer.map(a => `<li>${escapeHtml(a)}</li>`).join('') + '</ul>';
     }
 
     function showQuestion(index) {
